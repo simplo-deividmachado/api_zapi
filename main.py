@@ -94,9 +94,5 @@ if __name__ == '__main__':
     print(lista)
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
-        port=443,
-        ssl_certfile="certificate.pem",
-        ssl_keyfile="private.key",
         reload=True
     )
