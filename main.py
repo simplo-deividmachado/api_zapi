@@ -1,9 +1,11 @@
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 import logging
 from mensagem_handler import receber_mensagem
 from audio_handler import transcrever_audio  # importando novo handler
+import uvicorn
 
-app = Flask(__name__)
+app = FastAPI()
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -13,32 +15,32 @@ logger = logging.getLogger(__name__)
 ultima_mensagem = None
 lista = []
 
+@app.get("/")
+async def status():
+    return {
+        "status": "online",
+        "message": "Webhook pronto para receber mensagens"
+    }
 
-@app.route('/', methods=['POST', 'GET'])
-def webhook():
+@app.post("/")
+async def webhook(request: Request):
     global ultima_mensagem
 
-    if request.method == 'GET':
-        return jsonify({
-            "status": "online",
-            "message": "Webhook pronto para receber mensagens"
-        }), 200
-
     try:
-        if not request.is_json:
+        if request.headers.get("content-type") != "application/json":
             logger.error("Requisição sem JSON")
-            return jsonify({
-                "status": "error",
-                "message": "Dados não são JSON"
-            }), 400
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "Dados não são JSON"}
+            )
 
-        data = request.get_json()
+        data = await request.json()
         if not data:
             logger.error("JSON vazio ou inválido")
-            return jsonify({
-                "status": "error",
-                "message": "JSON inválido"
-            }), 400
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "JSON inválido"}
+            )
 
         # Log dos headers e body
         logger.info("\n--- Dados Recebidos ---")
@@ -53,7 +55,7 @@ def webhook():
                 "audioUrl": data["audio"].get("audioUrl", "")
             }
             transcrever_audio(dados_audio)
-            return jsonify({"status": "audio received"}), 200
+            return {"status": "audio received"}
 
         # Caso contrário, trata como mensagem de texto
         texto = data.get("text", "")
@@ -79,13 +81,22 @@ def webhook():
         print(f"Telefone: {ultima_mensagem['phone']}")
         print(f"Mensagem: {ultima_mensagem['message']}\n")
 
-        return jsonify({"status": "success"}), 200
+        return {"status": "success"}
 
     except Exception as e:
         logger.error(f"Erro ao processar webhook: {str(e)}", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
 
 if __name__ == '__main__':
     print(lista)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=443,
+        ssl_certfile="certificate.pem",
+        ssl_keyfile="private.key",
+        reload=True
+    )
